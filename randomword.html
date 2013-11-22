@@ -1,0 +1,20 @@
+{% if site.randomword %}
+<section>
+<h1>Random Word</h1>
+<div id="randomword"><p>random word every 3 seconds</p></div>
+</section>
+<script type="application/javascript">
+function RandomWord(data) {
+   document.getElementById("randomword").innerHTML='<p>'+data.Word+'</p>';
+}
+setInterval( function() {
+  $.ajax({
+    type: "GET",
+    contentType: "application/json; charset=utf-8",
+    url: "http://publicsphere.org/words",
+    dataType: "json",
+    success: RandomWord
+  });
+}, 3000);
+</script>
+{% endif %}
