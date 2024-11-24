@@ -6,6 +6,7 @@ from random import sample
 import os
 import traceback
 import requests
+import re
 
 # load the set of words 
 wordset = set()
@@ -42,31 +43,52 @@ def randomWord():
      set of words from the file wordlist. The function sample 
      returns a list of length 1; we take its first element."""
     word = sample(list(wordset), 1)[0]
-    definition = get_definition(word)
-    response = make_response(json.dumps({'Word': word, 'Definition': definition}))
+    definitions, source = get_definitions(word)
+    response = make_response(json.dumps({'Word': word, 'Definitions': definitions, 'Source': source}, ensure_ascii=False))
     response.headers['Cache-Control'] = 'no-store'
     return response
 
 
-def get_definition(word):
-    """Fetch the dictionary definition for the given word."""
+def get_definitions(word):
+    """Fetch all dictionary definitions for the given word and indicate the source API used."""
+    definitions = []
+    source = ""
     try:
-        # Example dictionary API call (using Free Dictionary API for example purposes)
+        # Primary dictionary API call (using Free Dictionary API for example purposes)
         response = requests.get(f'https://api.dictionaryapi.dev/api/v2/entries/en/{word}')
         if response.status_code == 200:
             data = response.json()
-            # Extract the first definition from the response
+            # Extract all definitions from the response
             if data and isinstance(data, list):
-                meanings = data[0].get('meanings', [])
-                if meanings:
-                    definitions = meanings[0].get('definitions', [])
+                for meaning in data[0].get('meanings', []):
+                    for definition in meaning.get('definitions', []):
+                        definitions.append(definition.get('definition', ''))
+                if definitions:
+                    source = "dictionaryapi.dev"
+        
+        # Fallback to another dictionary API if primary fails or no definitions are available
+        if not definitions:
+            fallback_response = requests.get(f'https://api.datamuse.com/words?sp={word}&md=d')
+            if fallback_response.status_code == 200:
+                fallback_data = fallback_response.json()
+                if fallback_data and isinstance(fallback_data, list) and len(fallback_data) > 0 and 'defs' in fallback_data[0]:
+                    raw_definitions = fallback_data[0]['defs']
+                    for raw_definition in raw_definitions:
+                        # Replace 'n\t' with 'N: ', 'adj\t' with 'Adj: ', and 'adv\t' with 'Adv: '
+                        cleaned_definition = re.sub(r'^n\t', 'N: ', raw_definition)
+                        cleaned_definition = re.sub(r'^adj\t', 'Adj: ', cleaned_definition)
+                        cleaned_definition = re.sub(r'^adv\t', 'Adv: ', cleaned_definition)
+                        definitions.append(cleaned_definition.strip())
                     if definitions:
-                        return definitions[0].get('definition', 'Definition not available')
-        return "Definition not available"
+                        source = "datamuse.com"
+        
+        if not definitions:
+            return ["Definition not available"], "None"
+        return definitions, source
     except Exception as e:
-        print(f"Error fetching definition for word '{word}': {e}")
+        print(f"Error fetching definitions for word '{word}': {e}")
         print(traceback.format_exc())
-        return "Definition not available"
+        return ["Definition not available"], "None"
 
 if __name__ == '__main__':
   app.run(host='0.0.0.0')
