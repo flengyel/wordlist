@@ -48,18 +48,16 @@ def randomWord():
      set of words from the file wordlist. The function sample 
      returns a list of length 1; we take its first element."""
     word = sample(list(wordset), 1)[0]
-    definitions, source, metadata = get_definitions(word)
-    response = make_response(json.dumps({'Word': word, 'Definitions': definitions, 'Source': source, 'Metadata': metadata}, ensure_ascii=False))
+    definitions, source = get_definitions(word)
+    response = make_response(json.dumps({'Word': word, 'Definitions': definitions, 'Source': source}, ensure_ascii=False))
     response.headers['Cache-Control'] = 'no-store'
     return response
 
 @app.route('/define/<word>')
 def define_word(word):
-    """Return the definition of a specific word, including indication if it's not in the wordlist."""
-    if word not in wordset:
-        return make_response(json.dumps({'Word': word, 'Error': 'Word not found in wordlist'}), 404)
-    definitions, source, metadata = get_definitions(word)
-    response = make_response(json.dumps({'Word': word, 'Definitions': definitions, 'Source': source, 'Metadata': metadata}, ensure_ascii=False))
+    """Return the definition of a specific word, even if it's not in the wordlist."""
+    definitions, source = get_definitions(word)
+    response = make_response(json.dumps({'Word': word, 'Definitions': definitions, 'Source': source}, ensure_ascii=False))
     response.headers['Cache-Control'] = 'no-store'
     return response
 
@@ -79,7 +77,6 @@ def autocomplete():
 def get_definitions(word):
     """Fetch all dictionary definitions for the given word and indicate the source API used."""
     definitions = []
-    metadata = []
     source = ""
     try:
         # Primary dictionary API call (using Free Dictionary API for example purposes)
@@ -90,11 +87,26 @@ def get_definitions(word):
             if data and isinstance(data, list):
                 for meaning in data[0].get('meanings', []):
                     for definition in meaning.get('definitions', []):
-                        definitions.append(definition.get('definition', ''))
-                        metadata.append({
-                            'partOfSpeech': meaning.get('partOfSpeech', ''),
-                            'example': definition.get('example', '')
-                        })
+                        part_of_speech = meaning.get('partOfSpeech', '').lower()
+                        definition_text = definition.get('definition', '')
+                        example = definition.get('example', '')
+
+                        if part_of_speech == 'verb':
+                            formatted_definition = f"V: {definition_text}"
+                        elif part_of_speech == 'noun':
+                            formatted_definition = f"N: {definition_text}"
+                        elif part_of_speech == 'adjective':
+                            formatted_definition = f"Adj: {definition_text}"
+                        elif part_of_speech == 'adverb':
+                            formatted_definition = f"Adv: {definition_text}"
+                        else:
+                            formatted_definition = definition_text
+
+                        # Append example if it exists
+                        if example:
+                            formatted_definition += f" Example: {example}"
+
+                        definitions.append(formatted_definition)
                 if definitions:
                     source = "dictionaryapi.dev"
         
@@ -106,21 +118,22 @@ def get_definitions(word):
                 if fallback_data and isinstance(fallback_data, list) and len(fallback_data) > 0 and 'defs' in fallback_data[0]:
                     raw_definitions = fallback_data[0]['defs']
                     for raw_definition in raw_definitions:
-                        # Replace 'n\t' with 'N: ', 'adj\t' with 'Adj: ', and 'adv\t' with 'Adv: '
+                        # Replace 'n\t' with 'N: ', 'adj\t' with 'Adj: ', 'adv\t' with 'Adv: ', and 'v\t' with 'V: '
                         cleaned_definition = re.sub(r'^n\t', 'N: ', raw_definition)
                         cleaned_definition = re.sub(r'^adj\t', 'Adj: ', cleaned_definition)
                         cleaned_definition = re.sub(r'^adv\t', 'Adv: ', cleaned_definition)
+                        cleaned_definition = re.sub(r'^v\t', 'V: ', cleaned_definition)
                         definitions.append(cleaned_definition.strip())
                     if definitions:
                         source = "datamuse.com"
         
         if not definitions:
-            return ["Definition not available"], "None", []
-        return definitions, source, metadata
+            return ["Definition not available"], "None"
+        return definitions, source
     except Exception as e:
         print(f"Error fetching definitions for word '{word}': {e}")
         print(traceback.format_exc())
-        return ["Definition not available"], "None", []
+        return ["Definition not available"], "None"
 
 if __name__ == '__main__':
   app.run(host='0.0.0.0')
