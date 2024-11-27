@@ -30,7 +30,7 @@ def favicon():
     try:
         # Get the absolute path to the favicon.ico
         current_directory = os.path.dirname(os.path.abspath(__file__))
-        favicon_path = os.path.join(current_directory, 'favicon.ico')
+        favicon_path = os.path.join(current_directory, 'static/images/favicon.ico')
 
         # Send the file with appropriate caching headers
         response = send_file(favicon_path, mimetype='image/x-icon')
